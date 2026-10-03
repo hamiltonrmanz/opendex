@@ -11,6 +11,7 @@ export const LATENCY_MARKS = [
   "jev_decision",
   "permission_resolved",
   "action_start",
+  "session_ready",
   "model_first_token",
   "tts_enqueue",
   "first_audio",
@@ -23,7 +24,8 @@ export interface LatencySnapshot {
   marks: Partial<Record<LatencyMark, number>>;
   /** The most recent mark seen, in pipeline order. */
   stage: LatencyMark | null;
-  /** first_audio relative to the turn start; null until audio begins. */
+  /** Headline: session_ready (agent terminal is up, hit the hotkey) if the turn
+   *  launched one, else first_audio; relative to the turn start, null until then. */
   totalMs: number | null;
   /** Gap between consecutive seen marks (pipeline order) — where time went. */
   segments: Array<{ from: LatencyMark; to: LatencyMark; ms: number }>;
@@ -57,9 +59,10 @@ export class LatencyTrace {
     this.publish();
   }
 
-  /** True once audio has started — the turn is over, next mark is a new turn. */
+  /** True once the turn has landed (session up or audio started) — the next
+   *  mark is a new turn. */
   get complete(): boolean {
-    return this.at.first_audio !== undefined;
+    return this.at.first_audio !== undefined || this.at.session_ready !== undefined;
   }
 
   snapshot(): LatencySnapshot {
@@ -96,12 +99,12 @@ function compute(at: Partial<Record<LatencyMark, number>>): LatencySnapshot {
   return {
     marks,
     stage: seen[seen.length - 1],
-    totalMs: marks.first_audio ?? null,
+    totalMs: marks.session_ready ?? marks.first_audio ?? null,
     segments,
   };
 }
 
-/** Compact human label for the overlay: "1.2s" once audio starts, else the live stage. */
+/** Compact human label for the overlay: "1.2s" once the turn lands, else the live stage. */
 export function formatLatency(s: LatencySnapshot): string | null {
   if (!s.stage) return null;
   if (s.totalMs !== null) return `${(s.totalMs / 1000).toFixed(1)}s`;
