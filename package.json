@@ -18,6 +18,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "smoke:chat": "tsx scripts/smoke-chat.ts",
     "smoke:realtime": "tsx scripts/smoke-realtime.ts",
     "dist": "electron-vite build && electron-builder",

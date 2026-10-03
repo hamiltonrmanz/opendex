@@ -330,6 +330,17 @@ function SkillsSection({ data, setConfig }: SectionProps) {
   const { config } = data;
   return (
     <>
+      <SelectField
+        label="Approval profile (safe, reversible actions)"
+        hint="Applies only to low-risk actions like opening a web page or launching an app. Messages, shell, deletion, purchases and computer control always ask."
+        value={config.skills.profile ?? "ask"}
+        options={[
+          { value: "ask", label: "Ask each command" },
+          { value: "session", label: "Remember until I quit OpenDex" },
+          { value: "persistent", label: "Allow automatically" },
+        ]}
+        onChange={(v) => setConfig({ skills: { ...config.skills, profile: v } })}
+      />
       {SKILL_METAS.map((skill) => {
         const enabled = skill.optIn
           ? config.skills.enabled[skill.id] === true

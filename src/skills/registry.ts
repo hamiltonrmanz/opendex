@@ -6,6 +6,7 @@ import { openSkill } from "./open/skill";
 import { computerSkill } from "./computer/skill";
 import type { OpenDexConfig } from "../main/config/schema";
 import type { PermissionRequester, Skill, SkillMeta } from "./types";
+import { resolveRisk } from "../main/agent/permission-policy";
 
 // Built-in skills available to the agent. To add a skill: create a folder under
 // src/skills/<name>/ (meta.ts + skill.ts [+ view.tsx]) and add one line here.
@@ -73,7 +74,12 @@ export function buildToolSet({
         execute: skill.sensitive
           ? async (input: unknown) => {
               const detail = t.summarize ? t.summarize(input) : t.name;
-              const allowed = await requestPermission(skill.id, skill.label, detail);
+              const allowed = await requestPermission(
+                skill.id,
+                skill.label,
+                detail,
+                resolveRisk(t.risk, input),
+              );
               if (!allowed) return { error: "Permission denied by the user." };
               return t.execute(input as never);
             }

@@ -50,6 +50,10 @@ export const openSkill: Skill = {
         url: z.string().describe("An http(s) or mailto URL."),
       }),
       summarize: (i) => `Open URL: ${(i as { url: string }).url}`,
+      // Only plain web pages are safe+reversible; mailto: composes a message,
+      // which must stay an explicit approval.
+      risk: (i) =>
+        /^https?:/i.test((i as { url?: string }).url ?? "") ? "safe_reversible" : "always_ask",
       execute: async ({ url }: { url: string }) => {
         if (!/^(https?:|mailto:)/i.test(url)) {
           return { error: "Only http(s) and mailto URLs are allowed." };
@@ -65,6 +69,7 @@ export const openSkill: Skill = {
         name: z.string().describe("Application name."),
       }),
       summarize: (i) => `Launch app: ${(i as { name: string }).name}`,
+      risk: "safe_reversible",
       execute: async ({ name }: { name: string }) => {
         const result = await launchApp(name);
         return "ok" in result ? { ok: true, launched: name } : result;

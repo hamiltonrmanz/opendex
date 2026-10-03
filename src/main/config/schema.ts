@@ -1,3 +1,5 @@
+import type { PermissionProfile } from "../../skills/types";
+
 // Shared config types + defaults. Imported by the main process (store) and,
 // for types only, by the preload/renderer through the IPC layer.
 
@@ -106,6 +108,9 @@ export interface OpenDexConfig {
     enabled: Record<string, boolean>;
     /** Standing permission decision per skill: ask each time / always / never. */
     permissions: Record<string, SkillPermission>;
+    /** How approvals for safe, reversible actions are remembered (never
+     *  relaxes always-ask actions like shell/messages/computer-use). */
+    profile: PermissionProfile;
   };
   computer: {
     /** Animate cursor moves (watchable) vs teleport instantly (fastest). */
@@ -179,6 +184,7 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
     // `computer` is opt-in (off until the user enables it in Settings).
     enabled: { open: true, computer: false },
     permissions: { open: "ask", computer: "ask" },
+    profile: "ask",
   },
   computer: { animateCursor: true },
   // Anonymous usage analytics, on by default (opt-out in onboarding/Settings).

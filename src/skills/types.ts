@@ -27,6 +27,15 @@ export interface SkillMeta {
   imageResults?: boolean;
 }
 
+/** How dangerous a single tool call is. Anything not explicitly classified is
+ *  `always_ask` (fail closed) — profiles never auto-approve that tier. */
+export type ActionRisk = "safe_reversible" | "always_ask";
+
+/** How approvals for `safe_reversible` actions are remembered:
+ *  ask = prompt each command (default), session = remember until app quit,
+ *  persistent = auto-allow. Never relaxes `always_ask` actions. */
+export type PermissionProfile = "ask" | "session" | "persistent";
+
 /** What a tool's `execute` result is transformed into before it reaches the
  *  model — lets a tool hand back an image (e.g. a screenshot) instead of JSON. */
 export type ToModelOutput = NonNullable<Tool["toModelOutput"]>;
@@ -37,6 +46,8 @@ export interface SkillTool {
   inputSchema: ZodType;
   /** Build a short human summary of a call, shown in the permission prompt. */
   summarize?: (input: unknown) => string;
+  /** Risk tier of a call (static, or derived from its input). Omitted = always_ask. */
+  risk?: ActionRisk | ((input: unknown) => ActionRisk);
   execute: (input: never) => Promise<unknown>;
   /** Optional: convert the execute result into model-facing content (e.g. an image). */
   toModelOutput?: ToModelOutput;
@@ -56,4 +67,5 @@ export type PermissionRequester = (
   skillId: string,
   label: string,
   detail: string,
+  risk?: ActionRisk,
 ) => Promise<boolean>;
