@@ -17,6 +17,30 @@ function client() {
   return cachedClient;
 }
 
+/** Open a live MP3 byte stream for one sentence. Aborting `signal` tears down
+ *  the HTTP request, so a cancelled sentence stops costing latency and quota. */
+export async function openSpeechStream(
+  text: string,
+  signal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Missing text for synthesis.");
+
+  const voiceId = process.env.ELEVENLABS_VOICE_ID ?? DEFAULT_VOICE_ID;
+  const modelId = process.env.ELEVENLABS_MODEL_ID ?? "eleven_turbo_v2_5";
+
+  return client().textToSpeech.stream(
+    voiceId,
+    {
+      text: trimmed,
+      modelId,
+      outputFormat: "mp3_44100_128",
+      optimizeStreamingLatency: 3,
+    },
+    signal ? { abortSignal: signal } : undefined,
+  );
+}
+
 /**
  * Synthesise a sentence to MP3 bytes. Returns a Buffer the renderer wraps in a
  * Blob for playback. (Ported from the former app/api/tts/route.ts — we collect
@@ -24,19 +48,7 @@ function client() {
  * per-sentence clips are small, so the sentence-buffer latency win is kept.)
  */
 export async function synthesizeSpeech(text: string): Promise<Buffer> {
-  const trimmed = text.trim();
-  if (!trimmed) throw new Error("Missing text for synthesis.");
-
-  const voiceId = process.env.ELEVENLABS_VOICE_ID ?? DEFAULT_VOICE_ID;
-  const modelId = process.env.ELEVENLABS_MODEL_ID ?? "eleven_turbo_v2_5";
-
-  const stream = await client().textToSpeech.stream(voiceId, {
-    text: trimmed,
-    modelId,
-    outputFormat: "mp3_44100_128",
-    optimizeStreamingLatency: 3,
-  });
-
+  const stream = await openSpeechStream(text);
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   while (true) {

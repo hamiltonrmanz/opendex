@@ -53,13 +53,14 @@ export function OverlayTranscript({
       />
       {liveCaption &&
         (variant === "bubble" ? (
-          <div className="max-w-[80%] self-end px-4 py-2 italic text-foreground/45">
+          <div className="max-w-[85%] self-end rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-cyan-100/90">
+            <span className="mr-2 text-[10px] uppercase tracking-wider text-cyan-200/60">live</span>
             {liveCaption}
           </div>
         ) : (
-          <div className="flex gap-2 text-foreground/45">
-            <span>{">"}</span>
-            <span className="italic">{liveCaption}</span>
+          <div className="flex gap-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-cyan-100/90">
+            <span className="text-cyan-200/60">&gt;</span>
+            <span>{liveCaption}</span>
           </div>
         ))}
     </div>

@@ -196,6 +196,27 @@ function VoiceInputSection({ data, setConfig, setSecret }: SectionProps) {
         ]}
         onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, wakeMode: v } })}
       />
+      <SelectField
+        label="End-of-turn detection"
+        hint="Adaptive adjusts to your room noise and how fast you talk, and waits longer if you pause mid-sentence. Fixed always waits 1 second of silence. Applies to the local/cloud Whisper engines."
+        value={config.voiceInput.endpointing ?? "adaptive"}
+        options={[
+          { value: "adaptive", label: "Adaptive (default)" },
+          { value: "fixed", label: "Fixed 1 second" },
+        ]}
+        onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, endpointing: v } })}
+      />
+      <SelectField
+        label="Reflex actions from partial speech"
+        hint="Web Speech transcription only. Observe measures how early Jev could act. Act also opens an app or web search as soon as you finish saying it — through the permission gate, and only for simple commands."
+        value={config.voiceInput.reflexMode ?? "observe"}
+        options={[
+          { value: "off", label: "Off" },
+          { value: "observe", label: "Observe only (default)" },
+          { value: "act", label: "Act on safe reversible commands" },
+        ]}
+        onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, reflexMode: v } })}
+      />
       {/* Transcription is the realtime model's job in realtime mode — these
           pipeline-only controls hide rather than sit disabled. */}
       {!realtimeActive && (
@@ -260,6 +281,32 @@ function AppearanceSection({ data, setConfig }: SectionProps) {
             { value: "off", label: "Off" },
           ]}
           onChange={(v) => setConfig({ appearance: { showToolActivity: v === "on" } })}
+        />
+      </ToggleRow>
+      <ToggleRow
+        title="Listening / finalizing indicator"
+        description="Show a small pill while you speak, so you can see when OpenDex is about to commit your turn."
+      >
+        <SegmentedControl
+          value={config.appearance.showEndpointState !== false ? "on" : "off"}
+          options={[
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setConfig({ appearance: { showEndpointState: v === "on" } })}
+        />
+      </ToggleRow>
+      <ToggleRow
+        title="Voice latency readout"
+        description="Show a small chip with time-to-first-audio and per-stage timings (hover). Numbers only — no transcript or audio is recorded."
+      >
+        <SegmentedControl
+          value={config.appearance.showLatency ? "on" : "off"}
+          options={[
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setConfig({ appearance: { showLatency: v === "on" } })}
         />
       </ToggleRow>
       <HotkeyField
@@ -330,6 +377,17 @@ function SkillsSection({ data, setConfig }: SectionProps) {
   const { config } = data;
   return (
     <>
+      <SelectField
+        label="Approval profile (safe, reversible actions)"
+        hint="Applies only to low-risk actions: opening a web page, a mail compose window or a folder under your home, launching an app, or starting a Claude/Codex terminal session. Messages, arbitrary shell, deletion, purchases and computer control always ask."
+        value={config.skills.profile ?? "ask"}
+        options={[
+          { value: "ask", label: "Ask each command" },
+          { value: "session", label: "Remember until I quit OpenDex" },
+          { value: "persistent", label: "Allow automatically" },
+        ]}
+        onChange={(v) => setConfig({ skills: { ...config.skills, profile: v } })}
+      />
       {SKILL_METAS.map((skill) => {
         const enabled = skill.optIn
           ? config.skills.enabled[skill.id] === true
@@ -422,6 +480,12 @@ function ModelSection({ data, setConfig, setSecret }: SectionProps) {
         present={secrets.TAVILY_API_KEY}
         onSave={(v) => setSecret("TAVILY_API_KEY", v)}
       />
+      <SecretField
+        label="TypeSafe Jev API key (reflex router)"
+        hint="Optional — lets Jev classify fast, safe reflex actions before the main model responds."
+        present={secrets.TYPESAFE_API_KEY}
+        onSave={(v) => setSecret("TYPESAFE_API_KEY", v)}
+      />
     </>
   );
 }
@@ -446,6 +510,19 @@ function TtsSection({ data, setConfig, setSecret }: SectionProps) {
             present={secrets.ELEVENLABS_API_KEY}
             onSave={(v) => setSecret("ELEVENLABS_API_KEY", v)}
           />
+          <ToggleRow
+            title="Stream audio as it's generated (experimental)"
+            description="Starts speaking on the first bytes instead of waiting for each sentence, and stops instantly when interrupted. If streaming fails, that sentence is spoken by your system voice."
+          >
+            <SegmentedControl
+              value={config.tts.streaming ? "on" : "off"}
+              options={[
+                { value: "on", label: "On" },
+                { value: "off", label: "Off" },
+              ]}
+              onChange={(v) => setConfig({ tts: { streaming: v === "on" } })}
+            />
+          </ToggleRow>
           <TextField
             label="Voice ID"
             hint="From your ElevenLabs voice library."

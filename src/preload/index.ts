@@ -109,6 +109,63 @@ const opendex = {
     return ipcRenderer.invoke(IPC.ttsSynthesize, text);
   },
 
+  /** Stream one sentence of TTS. `onChunk` receives MP3 bytes as the provider
+   *  produces them; returns a cancel fn that aborts the upstream request. */
+  ttsStream(
+    text: string,
+    handlers: {
+      onChunk: (bytes: Uint8Array) => void;
+      onEnd: () => void;
+      onError: (message: string) => void;
+    },
+  ): () => void {
+    const id = randomUUID();
+    const chunkCh = IPC.ttsStreamChunk(id);
+    const endCh = IPC.ttsStreamEnd(id);
+    const errCh = IPC.ttsStreamError(id);
+    let settled = false;
+    const cleanup = () => {
+      settled = true;
+      ipcRenderer.removeAllListeners(chunkCh);
+      ipcRenderer.removeAllListeners(endCh);
+      ipcRenderer.removeAllListeners(errCh);
+    };
+    ipcRenderer.on(chunkCh, (_e: IpcRendererEvent, bytes: Uint8Array) => {
+      if (!settled) handlers.onChunk(bytes);
+    });
+    ipcRenderer.once(endCh, () => {
+      if (settled) return;
+      cleanup();
+      handlers.onEnd();
+    });
+    ipcRenderer.once(errCh, (_e: IpcRendererEvent, message: string) => {
+      if (settled) return;
+      cleanup();
+      handlers.onError(message);
+    });
+    ipcRenderer.send(IPC.ttsStreamStart, id, text);
+    return () => {
+      if (settled) return;
+      cleanup();
+      ipcRenderer.send(IPC.ttsStreamCancel, id);
+    };
+  },
+
+  /** Ask the main-process Jev adapter for a closed-set reflex decision. */
+  classifyReflex(transcript: string) {
+    return ipcRenderer.invoke(IPC.reflexClassify, transcript);
+  },
+
+  /** Ask main to start the fixed, reversible action for an allowlisted reflex
+   *  label. Main re-plans from the words, gates it, and may refuse. */
+  actReflex(choice: string, transcript: string) {
+    return ipcRenderer.invoke(IPC.reflexAct, choice, transcript) as Promise<{
+      started: boolean;
+      tool?: string;
+      reason?: string;
+    }>;
+  },
+
   // ── Realtime voice sessions ───────────────────────────────────────────────
   // The WebSocket lives in main (the gateway key authenticates the upgrade);
   // the renderer streams mic PCM up and plays the audio notices coming back.
@@ -197,6 +254,13 @@ const opendex = {
     const listener = () => handler();
     ipcRenderer.on(IPC.pushToTalk, listener);
     return () => ipcRenderer.removeListener(IPC.pushToTalk, listener);
+  },
+
+  /** A permission prompt was resolved; payload is the epoch-ms timestamp only. */
+  onPermissionSettled(handler: (at: number) => void): () => void {
+    const listener = (_e: unknown, at: number) => handler(at);
+    ipcRenderer.on(IPC.permissionSettled, listener);
+    return () => ipcRenderer.removeListener(IPC.permissionSettled, listener);
   },
 
   /** Subscribe to the global emergency-stop hotkey. Returns an unsubscribe fn. */

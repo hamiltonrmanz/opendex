@@ -14,6 +14,8 @@ import {
   type SystemVoiceOptions,
 } from "./speech-engine";
 import { AudioMeter } from "./audio-meter";
+import { latencyTrace } from "./latency-trace";
+import { ReflexScheduler, type ReflexMode } from "./reflex-scheduler";
 import { vlog } from "./voice-timing";
 import { CloudSttEngine } from "./engines/cloud-stt";
 import { RealtimeVoiceSession } from "./realtime/realtime-session";
@@ -131,10 +133,16 @@ export interface UseDexOptions {
   sttProvider: SttProvider;
   /** transformers.js Whisper model id (local STT). */
   whisperModel: string;
+  /** Jev reflex on partial transcripts (Web Speech STT only). */
+  reflexMode?: ReflexMode;
+  /** End-of-turn detection for frame-capture STT engines. */
+  endpointing?: "adaptive" | "fixed";
   /** Whether a proactive greeting fires on the first wake. */
   greetingEnabled: boolean;
   /** Which speech engine to use for spoken output. */
   ttsEngine: SpeechEngineKind;
+  /** Stream ElevenLabs audio as generated (experimental). */
+  ttsStreaming?: boolean;
   /** System-TTS voice settings (used when ttsEngine === "system"). */
   systemVoice: SystemVoiceOptions;
   /** Whether to surface tool-call action hints (drives the overlay HUD). */
@@ -175,10 +183,41 @@ export interface UseDexResult {
   toggleMute: () => void;
 }
 
+/** Ask Jev for a reflex decision on finalized text. Observational only for now:
+ *  the permission gate and tool loop are untouched. */
+function noteReflex(text: string): void {
+  void window.opendex.classifyReflex(text).then((decision) => {
+    latencyTrace.mark("jev_decision");
+    if (decision.choice !== "no_action") {
+      console.debug("[opendex reflex]", decision.choice, decision.source);
+    }
+  });
+}
+
 export function useDex(options: UseDexOptions): UseDexResult {
   // Latest options, readable from event handlers without re-binding them.
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  // Jev reflex on partial transcripts. Observational by default; in "act" mode
+  // main re-plans from a strict allowlist and runs it through the permission
+  // gate — this side only forwards a label and the user's own words.
+  const reflexRef = useRef<ReflexScheduler | null>(null);
+  if (!reflexRef.current) {
+    reflexRef.current = new ReflexScheduler({
+      classify: (text) => window.opendex.classifyReflex(text),
+      onDecision: () => latencyTrace.mark("jev_decision"),
+      dispatch: (choice, text) => {
+        latencyTrace.mark("action_start");
+        void window.opendex.actReflex(choice, text).then((r) => {
+          // Agent terminal is up: the moment the user can hit their dictation hotkey.
+          if (r.started && r.tool === "launchAgentSession") latencyTrace.mark("session_ready");
+        });
+      },
+      onSuperseded: () => console.debug("[opendex reflex] superseded after dispatch"),
+    });
+  }
+  reflexRef.current.setMode(options.reflexMode ?? "observe");
   const [status, setStatus] = useState<DexStatus>("idle");
   // Mirror of status for rAF-driven reads (getAmplitude) without re-binding.
   const statusRef = useRef<DexStatus>("idle");
@@ -488,6 +527,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
     async (userText: string, opts?: { mode?: "briefing"; resumeMode?: Mode }) => {
       const isBriefing = opts?.mode === "briefing";
       vlog("runCommand:start", { chars: userText.length, briefing: isBriefing });
+      if (latencyTrace.complete) latencyTrace.reset();
       // Next spoken chunk replaces the (now-stale) spoken caption rather than
       // appending — but we leave the prior reply on screen until then.
       spokenFreshRef.current = true;
@@ -509,6 +549,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
         if (!loggedFirstTts) {
           loggedFirstTts = true;
           vlog("tts:first-enqueue");
+          latencyTrace.mark("tts_enqueue");
         }
         tts.enqueue(text);
       };
@@ -559,6 +600,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
             if (!loggedFirstTool) {
               loggedFirstTool = true;
               vlog("tool:first", { tool: call.toolName });
+              latencyTrace.mark("action_start");
             }
             addToolActivity(call);
             recordToolCall(call);
@@ -569,6 +611,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
             if (!loggedFirstToken) {
               loggedFirstToken = true;
               vlog("model:first-token");
+              latencyTrace.mark("model_first_token");
             }
             assistantText += value;
             updateLastAssistant(assistantText);
@@ -1180,6 +1223,8 @@ export function useDex(options: UseDexOptions): UseDexResult {
       setLiveCaption("");
       const noSpeechMs =
         mode === "follow_up" ? FOLLOW_UP_NO_SPEECH_MS : COMMAND_NO_SPEECH_MS;
+      latencyTrace.reset();
+      reflexRef.current?.reset();
       vlog("capture:start", {
         mode,
         provider: opts.sttProvider,
@@ -1199,6 +1244,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
             if (ac.signal.aborted) return;
             const text = await engine.capture({
               silenceMs: END_SILENCE_MS,
+              adaptive: optionsRef.current.endpointing !== "fixed",
               noSpeechMs,
               hardTimeoutMs: COMMAND_HARD_TIMEOUT_MS,
               signal: ac.signal,
@@ -1228,6 +1274,9 @@ export function useDex(options: UseDexOptions): UseDexResult {
                 }
               }
             }
+            // Jev sees the finalized utterance first; it can never bypass the
+            // permission gate (see noteReflex).
+            noteReflex(cleaned);
             void runCommand(cleaned);
           } catch (err) {
             if (ac.signal.aborted) return;
@@ -1264,10 +1313,15 @@ export function useDex(options: UseDexOptions): UseDexResult {
           captureMs: Date.now() - startedAt,
           chars: cleaned.length,
         });
+        const reflex = reflexRef.current?.finalize(cleaned);
+        if (reflex?.dispatched) {
+          vlog("reflex:dispatched", { superseded: reflex.superseded });
+        }
         if (cleaned.length === 0) {
           // Nothing heard — both command and follow-up roll back to passive wake.
           startModeRef.current?.("wake");
         } else {
+          noteReflex(cleaned);
           void runCommand(cleaned);
         }
       };
@@ -1289,9 +1343,11 @@ export function useDex(options: UseDexOptions): UseDexResult {
       };
       resetSilenceTimer();
 
+      rec.onspeechstart = () => latencyTrace.mark("speech_start");
       rec.onresult = (event) => {
         const { finalText, interimText } = joinTranscript(event.results);
         const live = interimText || finalText;
+        if (live) latencyTrace.mark("first_partial");
 
         // Echo guard: within the early window of follow-up listening, drop
         // transcripts that look like the tail of the assistant's reply leaking through
@@ -1322,6 +1378,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
 
         finalTranscript = finalText;
         if (live) heardAnything = true;
+        if (live) reflexRef.current?.onPartial(`${finalText} ${interimText}`);
         setLiveCaption(live);
         resetSilenceTimer();
       };
@@ -1390,11 +1447,13 @@ export function useDex(options: UseDexOptions): UseDexResult {
     }
   }, []);
 
-  const ttsKindRef = useRef<SpeechEngineKind | null>(null);
+  const ttsKindRef = useRef<string | null>(null);
   const ensureTts = useCallback(() => {
     const { ttsEngine, systemVoice } = optionsRef.current;
+    const streaming = ttsEngine === "elevenlabs" && optionsRef.current.ttsStreaming === true;
+    const kindKey = `${ttsEngine}:${streaming ? "stream" : "clip"}`;
     // Recreate the engine if the configured kind changed (e.g. via settings).
-    if (ttsRef.current && ttsKindRef.current !== ttsEngine) {
+    if (ttsRef.current && ttsKindRef.current !== kindKey) {
       ttsRef.current.stop();
       ttsRef.current = null;
     }
@@ -1402,6 +1461,8 @@ export function useDex(options: UseDexOptions): UseDexResult {
       ttsRef.current = createSpeechEngine({
         kind: ttsEngine,
         system: systemVoice,
+        streaming,
+        getSystemVoice: () => optionsRef.current.systemVoice,
         callbacks: {
           onStateChange: (speaking) => {
             if (speaking) {
@@ -1413,6 +1474,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
           },
           onAudioBlocked: () => setAudioBlocked(true),
           onChunkStart: (text) => {
+            latencyTrace.mark("first_audio");
             setSpokenCaption((prev) => {
               if (spokenFreshRef.current) {
                 spokenFreshRef.current = false;
@@ -1423,7 +1485,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
           },
         },
       });
-      ttsKindRef.current = ttsEngine;
+      ttsKindRef.current = kindKey;
     } else if (ttsEngine === "system" && ttsRef.current instanceof SystemSpeechEngine) {
       // Engine kept across the session — push any updated voice/rate/pitch so a
       // settings change applies on the next utterance without a restart.
@@ -1443,6 +1505,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
     if (ttsRef.current) ensureTts();
   }, [
     options.ttsEngine,
+    options.ttsStreaming,
     options.systemVoice.voiceURI,
     options.systemVoice.rate,
     options.systemVoice.pitch,
@@ -1761,6 +1824,14 @@ export function useDex(options: UseDexOptions): UseDexResult {
     const off = window.opendex.onPushToTalk(() => pushToTalk());
     return off;
   }, [pushToTalk]);
+
+  // Permission prompt answered in main → latency mark (timestamp only).
+  useEffect(() => {
+    const off = window.opendex.onPermissionSettled((at) =>
+      latencyTrace.mark("permission_resolved", at),
+    );
+    return off;
+  }, []);
 
   // Global emergency-stop hotkey (⌘/Ctrl+Esc) → abort the current command.
   useEffect(() => {

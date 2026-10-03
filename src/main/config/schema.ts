@@ -1,3 +1,5 @@
+import type { PermissionProfile } from "../../skills/types";
+
 // Shared config types + defaults. Imported by the main process (store) and,
 // for types only, by the preload/renderer through the IPC layer.
 
@@ -30,6 +32,7 @@ export type SecretName =
   | "AI_GATEWAY_API_KEY"
   | "ELEVENLABS_API_KEY"
   | "TAVILY_API_KEY"
+  | "TYPESAFE_API_KEY"
   | "OPENAI_API_KEY"
   | "ANTHROPIC_API_KEY"
   | "XAI_API_KEY";
@@ -57,6 +60,9 @@ export interface OpenDexConfig {
   };
   tts: {
     engine: TtsEngine;
+    /** Stream ElevenLabs audio as it is generated (first audio on the first
+     *  bytes, instant cancel, system-voice fallback on failure). Experimental. */
+    streaming: boolean;
     elevenLabs: { voiceId: string; modelId: string };
     system: { voiceURI: string | null; rate: number; pitch: number };
   };
@@ -89,12 +95,23 @@ export interface OpenDexConfig {
     sttProvider: SttProvider;
     /** transformers.js Whisper model id (local STT). */
     whisperModel: string;
+    /** Jev reflex on partial transcripts (Web Speech STT only): off = nothing,
+     *  observe = classify + measure only, act = also start allowlisted
+     *  reversible actions (still through the permission gate). */
+    reflexMode: "off" | "observe" | "act";
+    /** adaptive = noise floor + speech rate + pause aware end-of-turn;
+     *  fixed = legacy 1s of trailing silence. Frame-capture STT engines only. */
+    endpointing: "adaptive" | "fixed";
   };
   appearance: {
     /** Voice-visualization theme id (used from the themes phase onward). */
     theme: string;
     /** Show transient banners for each tool the agent calls. */
     showToolActivity: boolean;
+    /** Show a compact end-to-end voice latency chip over the overlay. */
+    showLatency: boolean;
+    /** Show a small listening / finalizing pill while a command is captured. */
+    showEndpointState: boolean;
   };
   hotkeys: {
     /** Global accelerator that summons / hides the main window (Spotlight-style). */
@@ -105,6 +122,9 @@ export interface OpenDexConfig {
     enabled: Record<string, boolean>;
     /** Standing permission decision per skill: ask each time / always / never. */
     permissions: Record<string, SkillPermission>;
+    /** How approvals for safe, reversible actions are remembered (never
+     *  relaxes always-ask actions like shell/messages/computer-use). */
+    profile: PermissionProfile;
   };
   computer: {
     /** Animate cursor moves (watchable) vs teleport instantly (fastest). */
@@ -123,6 +143,7 @@ export interface SecretsPresence {
   AI_GATEWAY_API_KEY: boolean;
   ELEVENLABS_API_KEY: boolean;
   TAVILY_API_KEY: boolean;
+  TYPESAFE_API_KEY: boolean;
   OPENAI_API_KEY: boolean;
   ANTHROPIC_API_KEY: boolean;
   XAI_API_KEY: boolean;
@@ -145,6 +166,7 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
   llm: { provider: "gateway", model: "anthropic/claude-sonnet-4-6" },
   tts: {
     engine: "elevenlabs",
+    streaming: false,
     elevenLabs: { voiceId: "JBFqnCBsd6RMkjVDRZzb", modelId: "eleven_turbo_v2_5" },
     system: { voiceURI: null, rate: 1, pitch: 1 },
   },
@@ -167,8 +189,10 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
     wakeMode: "vosk",
     sttProvider: "whisper-local",
     whisperModel: "Xenova/whisper-base.en",
+    reflexMode: "observe",
+    endpointing: "adaptive",
   },
-  appearance: { theme: "editorial", showToolActivity: true },
+  appearance: { theme: "editorial", showToolActivity: true, showLatency: false, showEndpointState: true },
   // `Alt+Space` reads as ⌥Space on macOS (low-conflict). On Windows Alt+Space
   // opens the system window menu and won't register; the registrar falls back to
   // a secondary accelerator in that case (see registerSummonHotkey in index.ts).
@@ -177,6 +201,7 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
     // `computer` is opt-in (off until the user enables it in Settings).
     enabled: { open: true, computer: false },
     permissions: { open: "ask", computer: "ask" },
+    profile: "ask",
   },
   computer: { animateCursor: true },
   // Anonymous usage analytics, on by default (opt-out in onboarding/Settings).
@@ -188,6 +213,7 @@ export const SECRET_NAMES: SecretName[] = [
   "AI_GATEWAY_API_KEY",
   "ELEVENLABS_API_KEY",
   "TAVILY_API_KEY",
+  "TYPESAFE_API_KEY",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "XAI_API_KEY",

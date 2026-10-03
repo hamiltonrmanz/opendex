@@ -20,6 +20,9 @@ export interface CaptureOptions {
   noSpeechMs: number;
   /** Absolute cap on capture length. */
   hardTimeoutMs: number;
+  /** Adaptive endpointing (noise floor, speech rate, pause awareness).
+   *  false = legacy fixed `silenceMs`. Default true. */
+  adaptive?: boolean;
   signal?: AbortSignal;
 }
 

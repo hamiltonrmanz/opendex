@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { UpdateBanner } from "@/components/update-banner";
+import { LatencyChip } from "@/components/latency-chip";
+import { EndpointChip } from "@/components/endpoint-chip";
 import { getDexTheme } from "@/components/themes/registry";
 import { useConfig } from "@/lib/use-config";
 import { useDex, type UseDexOptions } from "@/lib/dex/use-dex";
@@ -54,8 +56,11 @@ function MainExperience({ data }: { data: PublicConfig }) {
       wakeMode: cfg.voiceInput.wakeMode,
       sttProvider: cfg.voiceInput.sttProvider,
       whisperModel: cfg.voiceInput.whisperModel,
+      reflexMode: cfg.voiceInput.reflexMode ?? "observe",
+      endpointing: cfg.voiceInput.endpointing ?? "adaptive",
       greetingEnabled: greetingEnabled(cfg),
       ttsEngine: cfg.tts.engine,
+      ttsStreaming: cfg.tts.streaming === true,
       systemVoice: cfg.tts.system,
       showToolActivity: cfg.appearance.showToolActivity,
     }),
@@ -66,9 +71,12 @@ function MainExperience({ data }: { data: PublicConfig }) {
       cfg.voiceInput.wakeMode,
       cfg.voiceInput.sttProvider,
       cfg.voiceInput.whisperModel,
+      cfg.voiceInput.reflexMode,
+      cfg.voiceInput.endpointing,
       cfg.greeting.mode,
       cfg.greeting.customPrompt,
       cfg.tts.engine,
+      cfg.tts.streaming,
       cfg.tts.system,
       cfg.appearance.showToolActivity,
     ],
@@ -142,6 +150,8 @@ function MainExperience({ data }: { data: PublicConfig }) {
       )}
 
       <UpdateBanner />
+      {cfg.appearance.showLatency && <LatencyChip />}
+      {cfg.appearance.showEndpointState !== false && <EndpointChip />}
 
       {dex.audioBlocked && (
         <button

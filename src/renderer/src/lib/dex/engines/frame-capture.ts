@@ -1,6 +1,9 @@
 import { WebVoiceProcessor } from "@picovoice/web-voice-processor";
 import { frameRms } from "./wav";
 import { vlog } from "../voice-timing";
+import { latencyTrace } from "../latency-trace";
+import { endpointState } from "../endpoint-state";
+import { Endpointer } from "./endpointer";
 import type { CaptureOptions } from "./types";
 
 // Shared mic-capture helper built on WebVoiceProcessor's 16kHz Int16 frames.
@@ -21,19 +24,26 @@ export async function captureUtterance(
   transcribe: (frames: Int16Array[]) => Promise<string>,
 ): Promise<string> {
   const frames: Int16Array[] = [];
-  let speechFrames = 0;
-  let lastVoiceAt = performance.now();
+  const ep = new Endpointer({
+    adaptive: opts.adaptive ?? true,
+    fixedSpeechRms: SPEECH_RMS,
+    fixedSilenceMs: opts.silenceMs,
+    minSpeechMs: MIN_SPEECH_FRAMES * 32,
+  });
+  let markedSpeechStart = false;
   const started = performance.now();
   let done = false;
+  endpointState.set("waiting");
 
   const engine = {
     onmessage: null as ((e: MessageEvent) => void) | null,
     postMessage: (e: { command: string; inputFrame?: Int16Array }) => {
       if (done || e.command !== "process" || !e.inputFrame) return;
       frames.push(e.inputFrame.slice());
-      if (frameRms(e.inputFrame) > SPEECH_RMS) {
-        speechFrames += 1;
-        lastVoiceAt = performance.now();
+      endpointState.set(ep.push(frameRms(e.inputFrame)));
+      if (!markedSpeechStart && ep.heardVoice) {
+        markedSpeechStart = true;
+        latencyTrace.mark("speech_start");
       }
     },
   };
@@ -43,12 +53,13 @@ export async function captureUtterance(
       if (done) return;
       done = true;
       clearInterval(poll);
+      endpointState.set("idle");
       try {
         await WebVoiceProcessor.unsubscribe(engine);
       } catch {
         // ignore
       }
-      if (cancelled || speechFrames < MIN_SPEECH_FRAMES) return resolve("");
+      if (cancelled || !ep.hasSpeech) return resolve("");
       try {
         vlog("transcribe:start", { frames: frames.length });
         const transcribeStart = performance.now();
@@ -71,17 +82,19 @@ export async function captureUtterance(
       if (elapsed > opts.hardTimeoutMs) {
         vlog("endpoint:hard-timeout", {
           captureMs: Math.round(elapsed),
-          speechFrames,
+          speechMs: ep.speechMs,
         });
         return void finish(false);
       }
-      if (speechFrames >= MIN_SPEECH_FRAMES) {
-        // Heard speech, then a trailing silence → end and transcribe.
-        if (now - lastVoiceAt > opts.silenceMs) {
+      if (ep.hasSpeech) {
+        // Heard speech, then enough trailing silence (adaptive or fixed) → end.
+        if (ep.ended) {
           vlog("endpoint:silence", {
-            silenceMs: opts.silenceMs,
+            adaptive: opts.adaptive ?? true,
+            silenceMs: Math.round(ep.targetSilenceMs),
+            speechRate: ep.speechRate === null ? null : Number(ep.speechRate.toFixed(1)),
             captureMs: Math.round(elapsed),
-            speechFrames,
+            speechMs: ep.speechMs,
           });
           void finish(false);
         }
@@ -94,6 +107,7 @@ export async function captureUtterance(
 
     WebVoiceProcessor.subscribe(engine).catch((err) => {
       clearInterval(poll);
+      endpointState.set("idle");
       reject(err);
     });
   });

@@ -15,6 +15,15 @@ export const IPC = {
   chatDone: (id: string) => `chat:done:${id}`,
   chatError: (id: string) => `chat:error:${id}`,
   ttsSynthesize: "tts:synthesize",
+  // Streaming TTS: renderer → main start/cancel; main → renderer chunk/end/error
+  // on per-request channels (same shape as chat streaming).
+  ttsStreamStart: "tts:stream:start",
+  ttsStreamCancel: "tts:stream:cancel",
+  ttsStreamChunk: (id: string) => `tts:stream:chunk:${id}`,
+  ttsStreamEnd: (id: string) => `tts:stream:end:${id}`,
+  ttsStreamError: (id: string) => `tts:stream:error:${id}`,
+  reflexClassify: "reflex:classify",
+  reflexAct: "reflex:act",
   // Realtime voice sessions (speech-to-speech). The WebSocket lives in MAIN —
   // the gateway authenticates the upgrade with the raw AI_GATEWAY_API_KEY (no
   // ephemeral secret is minted), so the renderer can never host the socket
@@ -41,6 +50,8 @@ export const IPC = {
   llmAppleAvailability: "llm:apple-availability",
   // main → renderer event: global push-to-talk hotkey pressed
   pushToTalk: "push-to-talk",
+  // main → renderer: a permission prompt settled (payload: epoch ms, no content)
+  permissionSettled: "permission:settled",
   // main → renderer event: global emergency-stop hotkey pressed
   interrupt: "interrupt",
   // Session-state relay: the main window pushes a snapshot of the live voice

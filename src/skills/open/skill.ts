@@ -3,6 +3,35 @@ import { shell } from "electron";
 import { z } from "zod";
 import { meta, TOOLS } from "./meta";
 import type { Skill } from "../types";
+import { AGENT_COMMANDS, openPathRisk, openUrlRisk, type AgentName } from "./risk";
+
+function launchAgentInTerminal(agent: AgentName): Promise<{ ok: true } | { error: string }> {
+  return new Promise((resolve) => {
+    if (process.platform !== "darwin") {
+      resolve({ error: "Agent sessions are only supported on macOS (Terminal.app)." });
+      return;
+    }
+    // The command comes from AGENT_COMMANDS (fixed literals), never from input.
+    const cmd = AGENT_COMMANDS[agent];
+    const child = spawn(
+      "osascript",
+      ["-e", 'tell application "Terminal"', "-e", "activate", "-e", `do script "${cmd}"`, "-e", "end tell"],
+      { stdio: "ignore" },
+    );
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ error: "Timed out opening Terminal (check Automation permission)." });
+    }, 8000);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      resolve({ error: err.message });
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      resolve(code === 0 ? { ok: true } : { error: `osascript exited with code ${code}` });
+    });
+  });
+}
 
 function launchApp(name: string): Promise<{ ok: true } | { error: string }> {
   return new Promise((resolve) => {
@@ -50,6 +79,9 @@ export const openSkill: Skill = {
         url: z.string().describe("An http(s) or mailto URL."),
       }),
       summarize: (i) => `Open URL: ${(i as { url: string }).url}`,
+      // Web pages and mailto: compose windows are safe+reversible (nothing is
+      // sent). Any other scheme stays an explicit approval.
+      risk: (i) => openUrlRisk((i as { url?: string }).url),
       execute: async ({ url }: { url: string }) => {
         if (!/^(https?:|mailto:)/i.test(url)) {
           return { error: "Only http(s) and mailto URLs are allowed." };
@@ -65,6 +97,7 @@ export const openSkill: Skill = {
         name: z.string().describe("Application name."),
       }),
       summarize: (i) => `Launch app: ${(i as { name: string }).name}`,
+      risk: "safe_reversible",
       execute: async ({ name }: { name: string }) => {
         const result = await launchApp(name);
         return "ok" in result ? { ok: true, launched: name } : result;
@@ -77,9 +110,25 @@ export const openSkill: Skill = {
         path: z.string().describe("Absolute path to a file or folder."),
       }),
       summarize: (i) => `Open path: ${(i as { path: string }).path}`,
+      // Folders under $HOME are reversible; files and anything else ask.
+      risk: (i) => openPathRisk((i as { path?: string }).path),
       execute: async ({ path }: { path: string }) => {
         const err = await shell.openPath(path); // "" on success
         return err ? { error: err } : { ok: true, opened: path };
+      },
+    },
+    {
+      name: TOOLS.launchAgentSession,
+      description:
+        "Open a new Terminal window and start a coding agent CLI in it (claude or codex). The user then dictates into it with their own hotkey.",
+      inputSchema: z.object({
+        agent: z.enum(["claude", "codex"]).describe("Which agent CLI to start."),
+      }),
+      summarize: (i) => `Start ${(i as { agent: string }).agent} in a new Terminal`,
+      risk: "safe_reversible",
+      execute: async ({ agent }: { agent: AgentName }) => {
+        const result = await launchAgentInTerminal(agent);
+        return "ok" in result ? { ok: true, launched: agent } : result;
       },
     },
   ],

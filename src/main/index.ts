@@ -40,6 +40,7 @@ import {
   type PermissionDecision,
 } from "./agent/permissions";
 import { synthesizeSpeech } from "./tts/elevenlabs";
+import { registerTtsStreamIpc } from "./tts/stream-ipc";
 import { transcribe } from "./stt";
 import {
   completeOnboarding,
@@ -53,6 +54,9 @@ import {
 import type { DeepPartial, OpenDexConfig, SecretName, SttProvider } from "./config/schema";
 import { initAutoUpdater } from "./updater";
 import { initAnalytics, track } from "./analytics";
+import { classifyReflex } from "./agent/reflex/jev";
+import { actOnReflex } from "./agent/reflex/act";
+import { reflexLedger } from "./agent/reflex/ledger";
 
 // Load a dev .env first; initConfig() then layers the user's saved config on
 // top (config values win; .env remains a fallback for unset secrets).
@@ -598,6 +602,41 @@ function registerIpc() {
       buffer.byteOffset,
       buffer.byteOffset + buffer.byteLength,
     ) as ArrayBuffer;
+  });
+
+  registerTtsStreamIpc();
+
+  ipcMain.handle(IPC.reflexClassify, (_event, transcript: string) =>
+    classifyReflex(typeof transcript === "string" ? transcript : ""),
+  );
+
+  // Reflex action: the renderer sends only a label + the user's words. Main
+  // re-plans from a strict allowlist (never trusts a tool/args from the
+  // renderer or from Jev) and runs it through the normal permission gate.
+  ipcMain.handle(IPC.reflexAct, async (event, choice: unknown, transcript: unknown) => {
+    const config = getConfig();
+    if (config.voiceInput.reflexMode !== "act") return { started: false, reason: "disabled" };
+    if (typeof choice !== "string" || typeof transcript !== "string") {
+      return { started: false, reason: "no_plan" };
+    }
+    const tools = buildToolSet({
+      config,
+      requestPermission: makePermissionRequester(event.sender),
+      include: (skill) => skill.id === "open",
+      dedupeReflex: false, // we ARE the reflex path; don't claim our own entry
+    });
+    return actOnReflex(
+      choice,
+      transcript,
+      (plan) => {
+        const t = tools[plan.tool];
+        if (!t?.execute) return undefined;
+        return Promise.resolve(
+          t.execute(plan.input as never, { toolCallId: randomUUID(), messages: [] }),
+        );
+      },
+      reflexLedger,
+    );
   });
 
   // Realtime voice sessions --------------------------------------------------

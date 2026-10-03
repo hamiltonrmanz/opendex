@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { WebContents } from "electron";
-import type { PermissionRequestPayload } from "../ipc/channels";
+import { IPC, type PermissionRequestPayload } from "../ipc/channels";
 import { getConfig, updateConfig } from "../config/store";
-import type { PermissionRequester } from "../../skills/types";
+import type { ActionRisk, PermissionRequester } from "../../skills/types";
+import { decidePermission, grantsSession } from "./permission-policy";
 
 export type PermissionDecision = "allow_once" | "always" | "deny" | "never";
 
@@ -11,6 +12,10 @@ export type PermissionDecision = "allow_once" | "always" | "deny" | "never";
 const PERMISSION_TIMEOUT_MS = 120_000;
 
 const pending = new Map<string, (decision: PermissionDecision) => void>();
+
+// Skills approved for safe_reversible actions under the `session` profile.
+// Lives for the app process only — never persisted.
+const appSessionAllow = new Set<string>();
 
 /** How prompts are surfaced. The main process wires this to the dedicated
  *  always-on-top permission popup so a prompt is visible regardless of the main
@@ -50,13 +55,18 @@ export function resolvePermission(id: string, decision: PermissionDecision) {
  */
 export function makePermissionRequester(sender: WebContents): PermissionRequester {
   const sessionAllow = new Set<string>();
-  return (skillId, label, detail) =>
+  return (skillId, label, detail, risk: ActionRisk = "always_ask") =>
     new Promise<boolean>((resolve) => {
-      // Persisted standing decisions short-circuit the prompt.
-      const standing = getConfig().skills.permissions[skillId];
-      if (standing === "always") return resolve(true);
-      if (standing === "never") return resolve(false);
-      if (sessionAllow.has(skillId)) return resolve(true);
+      const { permissions, profile } = getConfig().skills;
+      const verdict = decidePermission({
+        risk,
+        profile: profile ?? "ask",
+        standing: permissions[skillId],
+        commandGrant: sessionAllow.has(skillId),
+        sessionGrant: appSessionAllow.has(skillId),
+      });
+      if (verdict === "allow") return resolve(true);
+      if (verdict === "deny") return resolve(false);
 
       if (sender.isDestroyed()) return resolve(false);
 
@@ -72,11 +82,20 @@ export function makePermissionRequester(sender: WebContents): PermissionRequeste
         settled = true;
         clearTimeout(timer);
         pending.delete(id);
-        if (!sender.isDestroyed()) sender.off("destroyed", onDestroyed);
+        if (!sender.isDestroyed()) {
+          sender.off("destroyed", onDestroyed);
+          // Timestamp only (latency telemetry) — never the prompt content.
+          sender.send(IPC.permissionSettled, Date.now());
+        }
         // Drop the prompt from the popup (no-op if the user just answered it).
         permissionUi?.dismiss(id);
         const allowed = decision === "allow_once" || decision === "always";
-        if (allowed) sessionAllow.add(skillId);
+        if (allowed) {
+          sessionAllow.add(skillId);
+          if (grantsSession(risk, getConfig().skills.profile ?? "ask")) {
+            appSessionAllow.add(skillId);
+          }
+        }
         resolve(allowed);
       };
 
