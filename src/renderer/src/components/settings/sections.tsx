@@ -379,7 +379,7 @@ function SkillsSection({ data, setConfig }: SectionProps) {
     <>
       <SelectField
         label="Approval profile (safe, reversible actions)"
-        hint="Applies only to low-risk actions like opening a web page or launching an app. Messages, shell, deletion, purchases and computer control always ask."
+        hint="Applies only to low-risk actions: opening a web page, a mail compose window or a folder under your home, launching an app, or starting a Claude/Codex terminal session. Messages, arbitrary shell, deletion, purchases and computer control always ask."
         value={config.skills.profile ?? "ask"}
         options={[
           { value: "ask", label: "Ask each command" },

@@ -9,6 +9,7 @@
 export const REFLEX_OPTIONS = {
   no_action: "No immediate desktop action is justified.",
   open_app: "Open a named macOS application or URL.",
+  launch_agent: "Open a terminal and start a coding agent CLI (claude or codex).",
   search: "Search the web or the user's approved workspace.",
   type_text: "Type non-sensitive text into the currently focused app.",
 } as const;

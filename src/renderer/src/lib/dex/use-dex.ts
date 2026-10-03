@@ -209,7 +209,10 @@ export function useDex(options: UseDexOptions): UseDexResult {
       onDecision: () => latencyTrace.mark("jev_decision"),
       dispatch: (choice, text) => {
         latencyTrace.mark("action_start");
-        void window.opendex.actReflex(choice, text);
+        void window.opendex.actReflex(choice, text).then((r) => {
+          // Agent terminal is up: the moment the user can hit their dictation hotkey.
+          if (r.started && r.tool === "launchAgentSession") latencyTrace.mark("session_ready");
+        });
       },
       onSuperseded: () => console.debug("[opendex reflex] superseded after dispatch"),
     });
