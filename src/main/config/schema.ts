@@ -60,6 +60,9 @@ export interface OpenDexConfig {
   };
   tts: {
     engine: TtsEngine;
+    /** Stream ElevenLabs audio as it is generated (first audio on the first
+     *  bytes, instant cancel, system-voice fallback on failure). Experimental. */
+    streaming: boolean;
     elevenLabs: { voiceId: string; modelId: string };
     system: { voiceURI: string | null; rate: number; pitch: number };
   };
@@ -163,6 +166,7 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
   llm: { provider: "gateway", model: "anthropic/claude-sonnet-4-6" },
   tts: {
     engine: "elevenlabs",
+    streaming: false,
     elevenLabs: { voiceId: "JBFqnCBsd6RMkjVDRZzb", modelId: "eleven_turbo_v2_5" },
     system: { voiceURI: null, rate: 1, pitch: 1 },
   },

@@ -510,6 +510,19 @@ function TtsSection({ data, setConfig, setSecret }: SectionProps) {
             present={secrets.ELEVENLABS_API_KEY}
             onSave={(v) => setSecret("ELEVENLABS_API_KEY", v)}
           />
+          <ToggleRow
+            title="Stream audio as it's generated (experimental)"
+            description="Starts speaking on the first bytes instead of waiting for each sentence, and stops instantly when interrupted. If streaming fails, that sentence is spoken by your system voice."
+          >
+            <SegmentedControl
+              value={config.tts.streaming ? "on" : "off"}
+              options={[
+                { value: "on", label: "On" },
+                { value: "off", label: "Off" },
+              ]}
+              onChange={(v) => setConfig({ tts: { streaming: v === "on" } })}
+            />
+          </ToggleRow>
           <TextField
             label="Voice ID"
             hint="From your ElevenLabs voice library."

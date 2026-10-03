@@ -1,4 +1,8 @@
 import { TtsPlayer } from "./tts-player";
+import { StreamingTtsPlayer } from "./tts/streaming-player";
+import { IpcTtsProvider } from "./tts/ipc-provider";
+import { createAudioSink } from "./tts/audio-sinks";
+import { SystemFallbackVoice } from "./tts/system-fallback";
 
 // Common interface for spoken output, so the orchestrator (use-dex) is
 // agnostic to whether audio comes from ElevenLabs (main process) or the OS's
@@ -27,6 +31,16 @@ export interface SystemVoiceOptions {
 
 export type SpeechEngineKind = "elevenlabs" | "system";
 
+export function pickSystemVoice(opts: SystemVoiceOptions): SpeechSynthesisVoice | null {
+  const voices = window.speechSynthesis.getVoices();
+  if (opts.voiceURI) {
+    const match = voices.find((v) => v.voiceURI === opts.voiceURI);
+    if (match) return match;
+  }
+  // Prefer an English voice if no explicit choice.
+  return voices.find((v) => v.lang?.startsWith("en")) ?? voices[0] ?? null;
+}
+
 /**
  * System TTS via the renderer's SpeechSynthesis API. Sentences are spoken in
  * order; speaking-state is tracked so the orchestrator's state machine behaves
@@ -49,13 +63,7 @@ export class SystemSpeechEngine implements SpeechEngine {
   }
 
   private pickVoice(): SpeechSynthesisVoice | null {
-    const voices = window.speechSynthesis.getVoices();
-    if (this.opts.voiceURI) {
-      const match = voices.find((v) => v.voiceURI === this.opts.voiceURI);
-      if (match) return match;
-    }
-    // Prefer an English voice if no explicit choice.
-    return voices.find((v) => v.lang?.startsWith("en")) ?? voices[0] ?? null;
+    return pickSystemVoice(this.opts);
   }
 
   enqueue(text: string) {
@@ -114,11 +122,25 @@ export interface CreateSpeechEngineOptions {
   kind: SpeechEngineKind;
   callbacks: SpeechEngineCallbacks;
   system: SystemVoiceOptions;
+  /** ElevenLabs only: stream audio as generated, with system-voice fallback. */
+  streaming?: boolean;
+  /** Live system-voice settings for the fallback (read at speak time). */
+  getSystemVoice?: () => SystemVoiceOptions;
 }
 
 export function createSpeechEngine(opts: CreateSpeechEngineOptions): SpeechEngine {
   if (opts.kind === "system") {
     return new SystemSpeechEngine(opts.callbacks, opts.system);
+  }
+  if (opts.streaming) {
+    const getVoice = opts.getSystemVoice ?? (() => opts.system);
+    return new StreamingTtsPlayer(opts.callbacks, {
+      provider: new IpcTtsProvider(),
+      sink: createAudioSink(),
+      fallback: new SystemFallbackVoice(getVoice),
+      onError: (err, text) =>
+        console.warn("[opendex tts] stream failed, using fallback:", err, `(${text.length} chars)`),
+    });
   }
   return new TtsPlayer(opts.callbacks);
 }

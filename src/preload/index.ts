@@ -109,6 +109,48 @@ const opendex = {
     return ipcRenderer.invoke(IPC.ttsSynthesize, text);
   },
 
+  /** Stream one sentence of TTS. `onChunk` receives MP3 bytes as the provider
+   *  produces them; returns a cancel fn that aborts the upstream request. */
+  ttsStream(
+    text: string,
+    handlers: {
+      onChunk: (bytes: Uint8Array) => void;
+      onEnd: () => void;
+      onError: (message: string) => void;
+    },
+  ): () => void {
+    const id = randomUUID();
+    const chunkCh = IPC.ttsStreamChunk(id);
+    const endCh = IPC.ttsStreamEnd(id);
+    const errCh = IPC.ttsStreamError(id);
+    let settled = false;
+    const cleanup = () => {
+      settled = true;
+      ipcRenderer.removeAllListeners(chunkCh);
+      ipcRenderer.removeAllListeners(endCh);
+      ipcRenderer.removeAllListeners(errCh);
+    };
+    ipcRenderer.on(chunkCh, (_e: IpcRendererEvent, bytes: Uint8Array) => {
+      if (!settled) handlers.onChunk(bytes);
+    });
+    ipcRenderer.once(endCh, () => {
+      if (settled) return;
+      cleanup();
+      handlers.onEnd();
+    });
+    ipcRenderer.once(errCh, (_e: IpcRendererEvent, message: string) => {
+      if (settled) return;
+      cleanup();
+      handlers.onError(message);
+    });
+    ipcRenderer.send(IPC.ttsStreamStart, id, text);
+    return () => {
+      if (settled) return;
+      cleanup();
+      ipcRenderer.send(IPC.ttsStreamCancel, id);
+    };
+  },
+
   /** Ask the main-process Jev adapter for a closed-set reflex decision. */
   classifyReflex(transcript: string) {
     return ipcRenderer.invoke(IPC.reflexClassify, transcript);

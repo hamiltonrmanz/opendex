@@ -15,6 +15,13 @@ export const IPC = {
   chatDone: (id: string) => `chat:done:${id}`,
   chatError: (id: string) => `chat:error:${id}`,
   ttsSynthesize: "tts:synthesize",
+  // Streaming TTS: renderer → main start/cancel; main → renderer chunk/end/error
+  // on per-request channels (same shape as chat streaming).
+  ttsStreamStart: "tts:stream:start",
+  ttsStreamCancel: "tts:stream:cancel",
+  ttsStreamChunk: (id: string) => `tts:stream:chunk:${id}`,
+  ttsStreamEnd: (id: string) => `tts:stream:end:${id}`,
+  ttsStreamError: (id: string) => `tts:stream:error:${id}`,
   reflexClassify: "reflex:classify",
   reflexAct: "reflex:act",
   // Realtime voice sessions (speech-to-speech). The WebSocket lives in MAIN —

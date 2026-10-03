@@ -141,6 +141,8 @@ export interface UseDexOptions {
   greetingEnabled: boolean;
   /** Which speech engine to use for spoken output. */
   ttsEngine: SpeechEngineKind;
+  /** Stream ElevenLabs audio as generated (experimental). */
+  ttsStreaming?: boolean;
   /** System-TTS voice settings (used when ttsEngine === "system"). */
   systemVoice: SystemVoiceOptions;
   /** Whether to surface tool-call action hints (drives the overlay HUD). */
@@ -1442,11 +1444,13 @@ export function useDex(options: UseDexOptions): UseDexResult {
     }
   }, []);
 
-  const ttsKindRef = useRef<SpeechEngineKind | null>(null);
+  const ttsKindRef = useRef<string | null>(null);
   const ensureTts = useCallback(() => {
     const { ttsEngine, systemVoice } = optionsRef.current;
+    const streaming = ttsEngine === "elevenlabs" && optionsRef.current.ttsStreaming === true;
+    const kindKey = `${ttsEngine}:${streaming ? "stream" : "clip"}`;
     // Recreate the engine if the configured kind changed (e.g. via settings).
-    if (ttsRef.current && ttsKindRef.current !== ttsEngine) {
+    if (ttsRef.current && ttsKindRef.current !== kindKey) {
       ttsRef.current.stop();
       ttsRef.current = null;
     }
@@ -1454,6 +1458,8 @@ export function useDex(options: UseDexOptions): UseDexResult {
       ttsRef.current = createSpeechEngine({
         kind: ttsEngine,
         system: systemVoice,
+        streaming,
+        getSystemVoice: () => optionsRef.current.systemVoice,
         callbacks: {
           onStateChange: (speaking) => {
             if (speaking) {
@@ -1476,7 +1482,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
           },
         },
       });
-      ttsKindRef.current = ttsEngine;
+      ttsKindRef.current = kindKey;
     } else if (ttsEngine === "system" && ttsRef.current instanceof SystemSpeechEngine) {
       // Engine kept across the session — push any updated voice/rate/pitch so a
       // settings change applies on the next utterance without a restart.
@@ -1496,6 +1502,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
     if (ttsRef.current) ensureTts();
   }, [
     options.ttsEngine,
+    options.ttsStreaming,
     options.systemVoice.voiceURI,
     options.systemVoice.rate,
     options.systemVoice.pitch,

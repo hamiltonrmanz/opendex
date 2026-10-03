@@ -40,6 +40,7 @@ import {
   type PermissionDecision,
 } from "./agent/permissions";
 import { synthesizeSpeech } from "./tts/elevenlabs";
+import { registerTtsStreamIpc } from "./tts/stream-ipc";
 import { transcribe } from "./stt";
 import {
   completeOnboarding,
@@ -602,6 +603,8 @@ function registerIpc() {
       buffer.byteOffset + buffer.byteLength,
     ) as ArrayBuffer;
   });
+
+  registerTtsStreamIpc();
 
   ipcMain.handle(IPC.reflexClassify, (_event, transcript: string) =>
     classifyReflex(typeof transcript === "string" ? transcript : ""),
