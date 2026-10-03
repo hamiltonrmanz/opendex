@@ -53,6 +53,7 @@ import {
 import type { DeepPartial, OpenDexConfig, SecretName, SttProvider } from "./config/schema";
 import { initAutoUpdater } from "./updater";
 import { initAnalytics, track } from "./analytics";
+import { classifyReflex } from "./agent/reflex/jev";
 
 // Load a dev .env first; initConfig() then layers the user's saved config on
 // top (config values win; .env remains a fallback for unset secrets).
@@ -599,6 +600,10 @@ function registerIpc() {
       buffer.byteOffset + buffer.byteLength,
     ) as ArrayBuffer;
   });
+
+  ipcMain.handle(IPC.reflexClassify, (_event, transcript: string) =>
+    classifyReflex(transcript),
+  );
 
   // Realtime voice sessions --------------------------------------------------
   // The WebSocket + direct tool execution live in main (session-host.ts); the

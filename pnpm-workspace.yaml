@@ -1,3 +1,9 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+onlyBuiltDependencies:
+  - electron-winstaller
+  - esbuild
+  - onnxruntime-node
+  - protobufjs

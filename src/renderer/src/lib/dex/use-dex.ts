@@ -1228,6 +1228,14 @@ export function useDex(options: UseDexOptions): UseDexResult {
                 }
               }
             }
+            // Jev gets the finalized utterance first so its low-latency reflex
+            // decision can be surfaced/used by the action layer without ever
+            // bypassing OpenDex's existing permission gate.
+            void window.opendex.classifyReflex(cleaned).then((decision) => {
+              if (decision.choice !== "no_action") {
+                console.debug("[opendex reflex]", decision.choice, decision.source);
+              }
+            });
             void runCommand(cleaned);
           } catch (err) {
             if (ac.signal.aborted) return;
@@ -1268,7 +1276,12 @@ export function useDex(options: UseDexOptions): UseDexResult {
           // Nothing heard — both command and follow-up roll back to passive wake.
           startModeRef.current?.("wake");
         } else {
-          void runCommand(cleaned);
+        void window.opendex.classifyReflex(cleaned).then((decision) => {
+          if (decision.choice !== "no_action") {
+            console.debug("[opendex reflex]", decision.choice, decision.source);
+          }
+        });
+        void runCommand(cleaned);
         }
       };
 

@@ -422,6 +422,12 @@ function ModelSection({ data, setConfig, setSecret }: SectionProps) {
         present={secrets.TAVILY_API_KEY}
         onSave={(v) => setSecret("TAVILY_API_KEY", v)}
       />
+      <SecretField
+        label="TypeSafe Jev API key (reflex router)"
+        hint="Optional — lets Jev classify fast, safe reflex actions before the main model responds."
+        present={secrets.TYPESAFE_API_KEY}
+        onSave={(v) => setSecret("TYPESAFE_API_KEY", v)}
+      />
     </>
   );
 }

@@ -30,6 +30,7 @@ export type SecretName =
   | "AI_GATEWAY_API_KEY"
   | "ELEVENLABS_API_KEY"
   | "TAVILY_API_KEY"
+  | "TYPESAFE_API_KEY"
   | "OPENAI_API_KEY"
   | "ANTHROPIC_API_KEY"
   | "XAI_API_KEY";
@@ -123,6 +124,7 @@ export interface SecretsPresence {
   AI_GATEWAY_API_KEY: boolean;
   ELEVENLABS_API_KEY: boolean;
   TAVILY_API_KEY: boolean;
+  TYPESAFE_API_KEY: boolean;
   OPENAI_API_KEY: boolean;
   ANTHROPIC_API_KEY: boolean;
   XAI_API_KEY: boolean;
@@ -188,6 +190,7 @@ export const SECRET_NAMES: SecretName[] = [
   "AI_GATEWAY_API_KEY",
   "ELEVENLABS_API_KEY",
   "TAVILY_API_KEY",
+  "TYPESAFE_API_KEY",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "XAI_API_KEY",

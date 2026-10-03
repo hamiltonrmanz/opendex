@@ -15,6 +15,7 @@ export const IPC = {
   chatDone: (id: string) => `chat:done:${id}`,
   chatError: (id: string) => `chat:error:${id}`,
   ttsSynthesize: "tts:synthesize",
+  reflexClassify: "reflex:classify",
   // Realtime voice sessions (speech-to-speech). The WebSocket lives in MAIN —
   // the gateway authenticates the upgrade with the raw AI_GATEWAY_API_KEY (no
   // ephemeral secret is minted), so the renderer can never host the socket

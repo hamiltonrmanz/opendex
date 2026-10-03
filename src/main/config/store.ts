@@ -133,6 +133,7 @@ function secretsPresence(): SecretsPresence {
     AI_GATEWAY_API_KEY: hasSecret("AI_GATEWAY_API_KEY"),
     ELEVENLABS_API_KEY: hasSecret("ELEVENLABS_API_KEY"),
     TAVILY_API_KEY: hasSecret("TAVILY_API_KEY"),
+    TYPESAFE_API_KEY: hasSecret("TYPESAFE_API_KEY"),
     OPENAI_API_KEY: hasSecret("OPENAI_API_KEY"),
     ANTHROPIC_API_KEY: hasSecret("ANTHROPIC_API_KEY"),
     XAI_API_KEY: hasSecret("XAI_API_KEY"),

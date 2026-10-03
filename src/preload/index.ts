@@ -109,6 +109,11 @@ const opendex = {
     return ipcRenderer.invoke(IPC.ttsSynthesize, text);
   },
 
+  /** Ask the main-process Jev adapter for a closed-set reflex decision. */
+  classifyReflex(transcript: string) {
+    return ipcRenderer.invoke(IPC.reflexClassify, transcript);
+  },
+
   // ── Realtime voice sessions ───────────────────────────────────────────────
   // The WebSocket lives in main (the gateway key authenticates the upgrade);
   // the renderer streams mic PCM up and plays the audio notices coming back.
