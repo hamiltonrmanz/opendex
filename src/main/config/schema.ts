@@ -96,6 +96,9 @@ export interface OpenDexConfig {
      *  observe = classify + measure only, act = also start allowlisted
      *  reversible actions (still through the permission gate). */
     reflexMode: "off" | "observe" | "act";
+    /** adaptive = noise floor + speech rate + pause aware end-of-turn;
+     *  fixed = legacy 1s of trailing silence. Frame-capture STT engines only. */
+    endpointing: "adaptive" | "fixed";
   };
   appearance: {
     /** Voice-visualization theme id (used from the themes phase onward). */
@@ -104,6 +107,8 @@ export interface OpenDexConfig {
     showToolActivity: boolean;
     /** Show a compact end-to-end voice latency chip over the overlay. */
     showLatency: boolean;
+    /** Show a small listening / finalizing pill while a command is captured. */
+    showEndpointState: boolean;
   };
   hotkeys: {
     /** Global accelerator that summons / hides the main window (Spotlight-style). */
@@ -181,8 +186,9 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
     sttProvider: "whisper-local",
     whisperModel: "Xenova/whisper-base.en",
     reflexMode: "observe",
+    endpointing: "adaptive",
   },
-  appearance: { theme: "editorial", showToolActivity: true, showLatency: false },
+  appearance: { theme: "editorial", showToolActivity: true, showLatency: false, showEndpointState: true },
   // `Alt+Space` reads as ⌥Space on macOS (low-conflict). On Windows Alt+Space
   // opens the system window menu and won't register; the registrar falls back to
   // a secondary accelerator in that case (see registerSummonHotkey in index.ts).

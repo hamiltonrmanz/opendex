@@ -135,6 +135,8 @@ export interface UseDexOptions {
   whisperModel: string;
   /** Jev reflex on partial transcripts (Web Speech STT only). */
   reflexMode?: ReflexMode;
+  /** End-of-turn detection for frame-capture STT engines. */
+  endpointing?: "adaptive" | "fixed";
   /** Whether a proactive greeting fires on the first wake. */
   greetingEnabled: boolean;
   /** Which speech engine to use for spoken output. */
@@ -1237,6 +1239,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
             if (ac.signal.aborted) return;
             const text = await engine.capture({
               silenceMs: END_SILENCE_MS,
+              adaptive: optionsRef.current.endpointing !== "fixed",
               noSpeechMs,
               hardTimeoutMs: COMMAND_HARD_TIMEOUT_MS,
               signal: ac.signal,

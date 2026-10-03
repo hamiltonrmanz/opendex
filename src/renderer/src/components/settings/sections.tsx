@@ -197,6 +197,16 @@ function VoiceInputSection({ data, setConfig, setSecret }: SectionProps) {
         onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, wakeMode: v } })}
       />
       <SelectField
+        label="End-of-turn detection"
+        hint="Adaptive adjusts to your room noise and how fast you talk, and waits longer if you pause mid-sentence. Fixed always waits 1 second of silence. Applies to the local/cloud Whisper engines."
+        value={config.voiceInput.endpointing ?? "adaptive"}
+        options={[
+          { value: "adaptive", label: "Adaptive (default)" },
+          { value: "fixed", label: "Fixed 1 second" },
+        ]}
+        onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, endpointing: v } })}
+      />
+      <SelectField
         label="Reflex actions from partial speech"
         hint="Web Speech transcription only. Observe measures how early Jev could act. Act also opens an app or web search as soon as you finish saying it — through the permission gate, and only for simple commands."
         value={config.voiceInput.reflexMode ?? "observe"}
@@ -271,6 +281,19 @@ function AppearanceSection({ data, setConfig }: SectionProps) {
             { value: "off", label: "Off" },
           ]}
           onChange={(v) => setConfig({ appearance: { showToolActivity: v === "on" } })}
+        />
+      </ToggleRow>
+      <ToggleRow
+        title="Listening / finalizing indicator"
+        description="Show a small pill while you speak, so you can see when OpenDex is about to commit your turn."
+      >
+        <SegmentedControl
+          value={config.appearance.showEndpointState !== false ? "on" : "off"}
+          options={[
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setConfig({ appearance: { showEndpointState: v === "on" } })}
         />
       </ToggleRow>
       <ToggleRow
