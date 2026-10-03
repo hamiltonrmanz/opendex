@@ -585,6 +585,7 @@ function registerIpc() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (!ac.signal.aborted) console.error("[opendex] chat failed", err);
       if (!sender.isDestroyed()) sender.send(IPC.chatError(requestId), message);
     } finally {
       inFlight.delete(requestId);
