@@ -196,6 +196,17 @@ function VoiceInputSection({ data, setConfig, setSecret }: SectionProps) {
         ]}
         onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, wakeMode: v } })}
       />
+      <SelectField
+        label="Reflex actions from partial speech"
+        hint="Web Speech transcription only. Observe measures how early Jev could act. Act also opens an app or web search as soon as you finish saying it — through the permission gate, and only for simple commands."
+        value={config.voiceInput.reflexMode ?? "observe"}
+        options={[
+          { value: "off", label: "Off" },
+          { value: "observe", label: "Observe only (default)" },
+          { value: "act", label: "Act on safe reversible commands" },
+        ]}
+        onChange={(v) => setConfig({ voiceInput: { ...config.voiceInput, reflexMode: v } })}
+      />
       {/* Transcription is the realtime model's job in realtime mode — these
           pipeline-only controls hide rather than sit disabled. */}
       {!realtimeActive && (

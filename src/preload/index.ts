@@ -114,6 +114,16 @@ const opendex = {
     return ipcRenderer.invoke(IPC.reflexClassify, transcript);
   },
 
+  /** Ask main to start the fixed, reversible action for an allowlisted reflex
+   *  label. Main re-plans from the words, gates it, and may refuse. */
+  actReflex(choice: string, transcript: string) {
+    return ipcRenderer.invoke(IPC.reflexAct, choice, transcript) as Promise<{
+      started: boolean;
+      tool?: string;
+      reason?: string;
+    }>;
+  },
+
   // ── Realtime voice sessions ───────────────────────────────────────────────
   // The WebSocket lives in main (the gateway key authenticates the upgrade);
   // the renderer streams mic PCM up and plays the audio notices coming back.

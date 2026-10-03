@@ -15,6 +15,7 @@ import {
 } from "./speech-engine";
 import { AudioMeter } from "./audio-meter";
 import { latencyTrace } from "./latency-trace";
+import { ReflexScheduler, type ReflexMode } from "./reflex-scheduler";
 import { vlog } from "./voice-timing";
 import { CloudSttEngine } from "./engines/cloud-stt";
 import { RealtimeVoiceSession } from "./realtime/realtime-session";
@@ -132,6 +133,8 @@ export interface UseDexOptions {
   sttProvider: SttProvider;
   /** transformers.js Whisper model id (local STT). */
   whisperModel: string;
+  /** Jev reflex on partial transcripts (Web Speech STT only). */
+  reflexMode?: ReflexMode;
   /** Whether a proactive greeting fires on the first wake. */
   greetingEnabled: boolean;
   /** Which speech engine to use for spoken output. */
@@ -191,6 +194,23 @@ export function useDex(options: UseDexOptions): UseDexResult {
   // Latest options, readable from event handlers without re-binding them.
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  // Jev reflex on partial transcripts. Observational by default; in "act" mode
+  // main re-plans from a strict allowlist and runs it through the permission
+  // gate — this side only forwards a label and the user's own words.
+  const reflexRef = useRef<ReflexScheduler | null>(null);
+  if (!reflexRef.current) {
+    reflexRef.current = new ReflexScheduler({
+      classify: (text) => window.opendex.classifyReflex(text),
+      onDecision: () => latencyTrace.mark("jev_decision"),
+      dispatch: (choice, text) => {
+        latencyTrace.mark("action_start");
+        void window.opendex.actReflex(choice, text);
+      },
+      onSuperseded: () => console.debug("[opendex reflex] superseded after dispatch"),
+    });
+  }
+  reflexRef.current.setMode(options.reflexMode ?? "observe");
   const [status, setStatus] = useState<DexStatus>("idle");
   // Mirror of status for rAF-driven reads (getAmplitude) without re-binding.
   const statusRef = useRef<DexStatus>("idle");
@@ -1197,6 +1217,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
       const noSpeechMs =
         mode === "follow_up" ? FOLLOW_UP_NO_SPEECH_MS : COMMAND_NO_SPEECH_MS;
       latencyTrace.reset();
+      reflexRef.current?.reset();
       vlog("capture:start", {
         mode,
         provider: opts.sttProvider,
@@ -1284,6 +1305,10 @@ export function useDex(options: UseDexOptions): UseDexResult {
           captureMs: Date.now() - startedAt,
           chars: cleaned.length,
         });
+        const reflex = reflexRef.current?.finalize(cleaned);
+        if (reflex?.dispatched) {
+          vlog("reflex:dispatched", { superseded: reflex.superseded });
+        }
         if (cleaned.length === 0) {
           // Nothing heard — both command and follow-up roll back to passive wake.
           startModeRef.current?.("wake");
@@ -1345,6 +1370,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
 
         finalTranscript = finalText;
         if (live) heardAnything = true;
+        if (live) reflexRef.current?.onPartial(`${finalText} ${interimText}`);
         setLiveCaption(live);
         resetSilenceTimer();
       };

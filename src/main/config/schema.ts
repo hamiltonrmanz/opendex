@@ -92,6 +92,10 @@ export interface OpenDexConfig {
     sttProvider: SttProvider;
     /** transformers.js Whisper model id (local STT). */
     whisperModel: string;
+    /** Jev reflex on partial transcripts (Web Speech STT only): off = nothing,
+     *  observe = classify + measure only, act = also start allowlisted
+     *  reversible actions (still through the permission gate). */
+    reflexMode: "off" | "observe" | "act";
   };
   appearance: {
     /** Voice-visualization theme id (used from the themes phase onward). */
@@ -176,6 +180,7 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
     wakeMode: "vosk",
     sttProvider: "whisper-local",
     whisperModel: "Xenova/whisper-base.en",
+    reflexMode: "observe",
   },
   appearance: { theme: "editorial", showToolActivity: true, showLatency: false },
   // `Alt+Space` reads as ⌥Space on macOS (low-conflict). On Windows Alt+Space

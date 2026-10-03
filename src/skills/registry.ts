@@ -7,6 +7,7 @@ import { computerSkill } from "./computer/skill";
 import type { OpenDexConfig } from "../main/config/schema";
 import type { PermissionRequester, Skill, SkillMeta } from "./types";
 import { resolveRisk } from "../main/agent/permission-policy";
+import { reflexLedger } from "../main/agent/reflex/ledger";
 
 // Built-in skills available to the agent. To add a skill: create a folder under
 // src/skills/<name>/ (meta.ts + skill.ts [+ view.tsx]) and add one line here.
@@ -56,10 +57,14 @@ export function buildToolSet({
   config,
   requestPermission,
   include,
+  dedupeReflex = true,
 }: {
   config: OpenDexConfig;
   requestPermission: PermissionRequester;
   include?: (skill: Skill) => boolean;
+  /** Skip calls the reflex path already performed. The reflex path itself
+   *  passes false so it never claims its own ledger entry. */
+  dedupeReflex?: boolean;
 }): ToolSet {
   const set: ToolSet = {};
 
@@ -73,6 +78,9 @@ export function buildToolSet({
         toModelOutput: t.toModelOutput,
         execute: skill.sensitive
           ? async (input: unknown) => {
+              if (dedupeReflex && reflexLedger.claim(t.name, input)) {
+                return { ok: true, alreadyDone: true, note: "Already done moments ago." };
+              }
               const detail = t.summarize ? t.summarize(input) : t.name;
               const allowed = await requestPermission(
                 skill.id,
