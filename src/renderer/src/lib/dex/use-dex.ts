@@ -14,6 +14,7 @@ import {
   type SystemVoiceOptions,
 } from "./speech-engine";
 import { AudioMeter } from "./audio-meter";
+import { latencyTrace } from "./latency-trace";
 import { vlog } from "./voice-timing";
 import { CloudSttEngine } from "./engines/cloud-stt";
 import { RealtimeVoiceSession } from "./realtime/realtime-session";
@@ -173,6 +174,17 @@ export interface UseDexResult {
   unlockAudio: () => void;
   stop: () => void;
   toggleMute: () => void;
+}
+
+/** Ask Jev for a reflex decision on finalized text. Observational only for now:
+ *  the permission gate and tool loop are untouched. */
+function noteReflex(text: string): void {
+  void window.opendex.classifyReflex(text).then((decision) => {
+    latencyTrace.mark("jev_decision");
+    if (decision.choice !== "no_action") {
+      console.debug("[opendex reflex]", decision.choice, decision.source);
+    }
+  });
 }
 
 export function useDex(options: UseDexOptions): UseDexResult {
@@ -488,6 +500,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
     async (userText: string, opts?: { mode?: "briefing"; resumeMode?: Mode }) => {
       const isBriefing = opts?.mode === "briefing";
       vlog("runCommand:start", { chars: userText.length, briefing: isBriefing });
+      if (latencyTrace.complete) latencyTrace.reset();
       // Next spoken chunk replaces the (now-stale) spoken caption rather than
       // appending — but we leave the prior reply on screen until then.
       spokenFreshRef.current = true;
@@ -509,6 +522,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
         if (!loggedFirstTts) {
           loggedFirstTts = true;
           vlog("tts:first-enqueue");
+          latencyTrace.mark("tts_enqueue");
         }
         tts.enqueue(text);
       };
@@ -559,6 +573,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
             if (!loggedFirstTool) {
               loggedFirstTool = true;
               vlog("tool:first", { tool: call.toolName });
+              latencyTrace.mark("action_start");
             }
             addToolActivity(call);
             recordToolCall(call);
@@ -569,6 +584,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
             if (!loggedFirstToken) {
               loggedFirstToken = true;
               vlog("model:first-token");
+              latencyTrace.mark("model_first_token");
             }
             assistantText += value;
             updateLastAssistant(assistantText);
@@ -1180,6 +1196,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
       setLiveCaption("");
       const noSpeechMs =
         mode === "follow_up" ? FOLLOW_UP_NO_SPEECH_MS : COMMAND_NO_SPEECH_MS;
+      latencyTrace.reset();
       vlog("capture:start", {
         mode,
         provider: opts.sttProvider,
@@ -1228,14 +1245,9 @@ export function useDex(options: UseDexOptions): UseDexResult {
                 }
               }
             }
-            // Jev gets the finalized utterance first so its low-latency reflex
-            // decision can be surfaced/used by the action layer without ever
-            // bypassing OpenDex's existing permission gate.
-            void window.opendex.classifyReflex(cleaned).then((decision) => {
-              if (decision.choice !== "no_action") {
-                console.debug("[opendex reflex]", decision.choice, decision.source);
-              }
-            });
+            // Jev sees the finalized utterance first; it can never bypass the
+            // permission gate (see noteReflex).
+            noteReflex(cleaned);
             void runCommand(cleaned);
           } catch (err) {
             if (ac.signal.aborted) return;
@@ -1276,12 +1288,8 @@ export function useDex(options: UseDexOptions): UseDexResult {
           // Nothing heard — both command and follow-up roll back to passive wake.
           startModeRef.current?.("wake");
         } else {
-        void window.opendex.classifyReflex(cleaned).then((decision) => {
-          if (decision.choice !== "no_action") {
-            console.debug("[opendex reflex]", decision.choice, decision.source);
-          }
-        });
-        void runCommand(cleaned);
+          noteReflex(cleaned);
+          void runCommand(cleaned);
         }
       };
 
@@ -1302,9 +1310,11 @@ export function useDex(options: UseDexOptions): UseDexResult {
       };
       resetSilenceTimer();
 
+      rec.onspeechstart = () => latencyTrace.mark("speech_start");
       rec.onresult = (event) => {
         const { finalText, interimText } = joinTranscript(event.results);
         const live = interimText || finalText;
+        if (live) latencyTrace.mark("first_partial");
 
         // Echo guard: within the early window of follow-up listening, drop
         // transcripts that look like the tail of the assistant's reply leaking through
@@ -1426,6 +1436,7 @@ export function useDex(options: UseDexOptions): UseDexResult {
           },
           onAudioBlocked: () => setAudioBlocked(true),
           onChunkStart: (text) => {
+            latencyTrace.mark("first_audio");
             setSpokenCaption((prev) => {
               if (spokenFreshRef.current) {
                 spokenFreshRef.current = false;
@@ -1774,6 +1785,14 @@ export function useDex(options: UseDexOptions): UseDexResult {
     const off = window.opendex.onPushToTalk(() => pushToTalk());
     return off;
   }, [pushToTalk]);
+
+  // Permission prompt answered in main → latency mark (timestamp only).
+  useEffect(() => {
+    const off = window.opendex.onPermissionSettled((at) =>
+      latencyTrace.mark("permission_resolved", at),
+    );
+    return off;
+  }, []);
 
   // Global emergency-stop hotkey (⌘/Ctrl+Esc) → abort the current command.
   useEffect(() => {

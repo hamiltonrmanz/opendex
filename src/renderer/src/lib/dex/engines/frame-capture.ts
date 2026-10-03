@@ -1,6 +1,7 @@
 import { WebVoiceProcessor } from "@picovoice/web-voice-processor";
 import { frameRms } from "./wav";
 import { vlog } from "../voice-timing";
+import { latencyTrace } from "../latency-trace";
 import type { CaptureOptions } from "./types";
 
 // Shared mic-capture helper built on WebVoiceProcessor's 16kHz Int16 frames.
@@ -33,6 +34,7 @@ export async function captureUtterance(
       frames.push(e.inputFrame.slice());
       if (frameRms(e.inputFrame) > SPEECH_RMS) {
         speechFrames += 1;
+        if (speechFrames === 1) latencyTrace.mark("speech_start");
         lastVoiceAt = performance.now();
       }
     },

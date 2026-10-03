@@ -204,6 +204,13 @@ const opendex = {
     return () => ipcRenderer.removeListener(IPC.pushToTalk, listener);
   },
 
+  /** A permission prompt was resolved; payload is the epoch-ms timestamp only. */
+  onPermissionSettled(handler: (at: number) => void): () => void {
+    const listener = (_e: unknown, at: number) => handler(at);
+    ipcRenderer.on(IPC.permissionSettled, listener);
+    return () => ipcRenderer.removeListener(IPC.permissionSettled, listener);
+  },
+
   /** Subscribe to the global emergency-stop hotkey. Returns an unsubscribe fn. */
   onInterrupt(handler: () => void): () => void {
     const listener = () => handler();

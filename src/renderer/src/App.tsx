@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { UpdateBanner } from "@/components/update-banner";
+import { LatencyChip } from "@/components/latency-chip";
 import { getDexTheme } from "@/components/themes/registry";
 import { useConfig } from "@/lib/use-config";
 import { useDex, type UseDexOptions } from "@/lib/dex/use-dex";
@@ -142,6 +143,7 @@ function MainExperience({ data }: { data: PublicConfig }) {
       )}
 
       <UpdateBanner />
+      {cfg.appearance.showLatency && <LatencyChip />}
 
       {dex.audioBlocked && (
         <button

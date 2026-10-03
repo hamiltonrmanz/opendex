@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WebContents } from "electron";
-import type { PermissionRequestPayload } from "../ipc/channels";
+import { IPC, type PermissionRequestPayload } from "../ipc/channels";
 import { getConfig, updateConfig } from "../config/store";
 import type { ActionRisk, PermissionRequester } from "../../skills/types";
 import { decidePermission, grantsSession } from "./permission-policy";
@@ -82,7 +82,11 @@ export function makePermissionRequester(sender: WebContents): PermissionRequeste
         settled = true;
         clearTimeout(timer);
         pending.delete(id);
-        if (!sender.isDestroyed()) sender.off("destroyed", onDestroyed);
+        if (!sender.isDestroyed()) {
+          sender.off("destroyed", onDestroyed);
+          // Timestamp only (latency telemetry) — never the prompt content.
+          sender.send(IPC.permissionSettled, Date.now());
+        }
         // Drop the prompt from the popup (no-op if the user just answered it).
         permissionUi?.dismiss(id);
         const allowed = decision === "allow_once" || decision === "always";

@@ -98,6 +98,8 @@ export interface OpenDexConfig {
     theme: string;
     /** Show transient banners for each tool the agent calls. */
     showToolActivity: boolean;
+    /** Show a compact end-to-end voice latency chip over the overlay. */
+    showLatency: boolean;
   };
   hotkeys: {
     /** Global accelerator that summons / hides the main window (Spotlight-style). */
@@ -175,7 +177,7 @@ export const DEFAULT_CONFIG: OpenDexConfig = {
     sttProvider: "whisper-local",
     whisperModel: "Xenova/whisper-base.en",
   },
-  appearance: { theme: "editorial", showToolActivity: true },
+  appearance: { theme: "editorial", showToolActivity: true, showLatency: false },
   // `Alt+Space` reads as ⌥Space on macOS (low-conflict). On Windows Alt+Space
   // opens the system window menu and won't register; the registrar falls back to
   // a secondary accelerator in that case (see registerSummonHotkey in index.ts).

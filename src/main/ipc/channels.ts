@@ -42,6 +42,8 @@ export const IPC = {
   llmAppleAvailability: "llm:apple-availability",
   // main → renderer event: global push-to-talk hotkey pressed
   pushToTalk: "push-to-talk",
+  // main → renderer: a permission prompt settled (payload: epoch ms, no content)
+  permissionSettled: "permission:settled",
   // main → renderer event: global emergency-stop hotkey pressed
   interrupt: "interrupt",
   // Session-state relay: the main window pushes a snapshot of the live voice

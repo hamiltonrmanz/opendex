@@ -262,6 +262,19 @@ function AppearanceSection({ data, setConfig }: SectionProps) {
           onChange={(v) => setConfig({ appearance: { showToolActivity: v === "on" } })}
         />
       </ToggleRow>
+      <ToggleRow
+        title="Voice latency readout"
+        description="Show a small chip with time-to-first-audio and per-stage timings (hover). Numbers only — no transcript or audio is recorded."
+      >
+        <SegmentedControl
+          value={config.appearance.showLatency ? "on" : "off"}
+          options={[
+            { value: "on", label: "On" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setConfig({ appearance: { showLatency: v === "on" } })}
+        />
+      </ToggleRow>
       <HotkeyField
         label="Summon hotkey"
         hint="Global shortcut to show / hide OpenDex from anywhere (Spotlight-style)."

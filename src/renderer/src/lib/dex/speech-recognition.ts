@@ -21,6 +21,7 @@ export interface SpeechRecognitionInstance extends EventTarget {
   onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: ((event: Event) => void) | null;
   onstart: ((event: Event) => void) | null;
+  onspeechstart: ((event: Event) => void) | null;
   onspeechend: ((event: Event) => void) | null;
   onaudioend: ((event: Event) => void) | null;
   start(): void;
